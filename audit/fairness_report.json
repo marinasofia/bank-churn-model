@@ -1,0 +1,126 @@
+{
+  "model": "LogisticRegression(class_weight='balanced') on top 5 behavioral features, stratified 80/20 split, random_state=42",
+  "threshold": 0.5,
+  "test_set_size": 2026,
+  "overall": {
+    "recall": 0.7662,
+    "precision": 0.415,
+    "selection_rate": 0.2962
+  },
+  "note": "Income_Category is missing for some customers; those rows are excluded from income slices only. Groups with few actual churners in the test set give noisy recall estimates, so n_churners is reported alongside every metric.",
+  "groups": {
+    "Gender": {
+      "churn_rates_full_data": {
+        "F": {
+          "churn_rate": 0.1736,
+          "n": 5358
+        },
+        "M": {
+          "churn_rate": 0.1462,
+          "n": 4769
+        }
+      },
+      "test_set_metrics": {
+        "F": {
+          "n": 1086,
+          "n_churners": 181,
+          "recall": 0.8011,
+          "precision": 0.5216,
+          "selection_rate": 0.256
+        },
+        "M": {
+          "n": 940,
+          "n_churners": 144,
+          "recall": 0.7222,
+          "precision": 0.323,
+          "selection_rate": 0.3426
+        }
+      },
+      "demographic_parity_difference": 0.0866,
+      "equal_opportunity_difference": 0.0789,
+      "chi2_group_vs_actual_churn": {
+        "statistic": 13.8656,
+        "p_value": 0.0002,
+        "dof": 1
+      },
+      "chi2_group_vs_model_flag": {
+        "statistic": 17.7022,
+        "p_value": 0.0,
+        "dof": 1
+      }
+    },
+    "Income_Category": {
+      "churn_rates_full_data": {
+        "$120K +": {
+          "churn_rate": 0.1733,
+          "n": 727
+        },
+        "$40K - $60K": {
+          "churn_rate": 0.1514,
+          "n": 1790
+        },
+        "$60K - $80K": {
+          "churn_rate": 0.1348,
+          "n": 1402
+        },
+        "$80K - $120K": {
+          "churn_rate": 0.1577,
+          "n": 1535
+        },
+        "Less than $40K": {
+          "churn_rate": 0.1719,
+          "n": 3561
+        }
+      },
+      "test_set_metrics": {
+        "$120K +": {
+          "n": 139,
+          "n_churners": 21,
+          "recall": 0.5714,
+          "precision": 0.2609,
+          "selection_rate": 0.3309
+        },
+        "$40K - $60K": {
+          "n": 340,
+          "n_churners": 51,
+          "recall": 0.8039,
+          "precision": 0.4141,
+          "selection_rate": 0.2912
+        },
+        "$60K - $80K": {
+          "n": 266,
+          "n_churners": 32,
+          "recall": 0.7812,
+          "precision": 0.2976,
+          "selection_rate": 0.3158
+        },
+        "$80K - $120K": {
+          "n": 326,
+          "n_churners": 63,
+          "recall": 0.7302,
+          "precision": 0.3898,
+          "selection_rate": 0.362
+        },
+        "Less than $40K": {
+          "n": 729,
+          "n_churners": 124,
+          "recall": 0.7742,
+          "precision": 0.5079,
+          "selection_rate": 0.2593
+        }
+      },
+      "demographic_parity_difference": 0.1027,
+      "equal_opportunity_difference": 0.2325,
+      "chi2_group_vs_actual_churn": {
+        "statistic": 12.3681,
+        "p_value": 0.0148,
+        "dof": 4
+      },
+      "chi2_group_vs_model_flag": {
+        "statistic": 12.8096,
+        "p_value": 0.0122,
+        "dof": 4
+      }
+    }
+  }
+}
