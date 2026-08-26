@@ -1,0 +1,11 @@
+# Run order: bankchurners_cleaning.ipynb, bankchurners_eda.ipynb,
+# bankchurners_model.ipynb, then `python audit/fairness_audit.py` from the
+# project root. Developed on Python 3.12.
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.5
+scipy>=1.13
+matplotlib>=3.8
+seaborn>=0.13
+openpyxl>=3.1        # pandas.read_excel needs this for BankChurners.xlsx
+jupyterlab>=4.0      # only needed to open the notebooks
