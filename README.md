@@ -1,78 +1,104 @@
-# Bank Churn Model with Fairness Audit
+# Bank Churn Model
 
-Predicting which credit card customers are about to leave, and checking whether the model treats customer groups equitably. Built with Python, pandas, scikit-learn, scipy, and matplotlib.
+Flags credit card customers likely to leave, sizes the outreach list to the retention team's capacity, and audits whether the model treats customer groups equitably. Ships as a small package with a training entrypoint, a saved model artifact, a prediction CLI with reason codes, a drift check, and tests that run in CI.
 
-## Problem
+## The decisions that matter
 
-Churn is expensive: acquiring a new credit card customer costs far more than retaining an existing one. The goal is to flag likely churners early enough for a retention team to intervene, and to size that outreach list against team capacity. Because a missed churner (lost revenue) costs more than a wasted retention call, the model is tuned for recall first.
+**The threshold is a capacity decision, not a modelling one.** The model outputs probabilities. `python -m churn.predict batch.csv --capacity N` returns the N customers most likely to churn, and the capacity curve below says what share of churners that catches. A team that can make 900 calls a month gets a different list from a team that can make 300, and neither needs to know what a threshold is.
 
-## Data
+**Logistic regression is shipped even though gradient boosting scores higher, and the gap is written down.** On the same held-out split, HistGradientBoosting with default settings reaches AUC 0.921 against 0.871 for logistic regression, and catches 87% of churners at 600 flagged against 77%. That is a real gap. I kept logistic for now because its coefficients are what make the per-customer reason codes possible ("low transaction count, repeated contacts with the bank"), and a reason is what a retention agent acts on. The honest next step is either to ship gradient boosting with SHAP-style reasons or to accept the recall cost in exchange for a model a compliance reviewer can read in one line. The numbers to make that call with are in `artifacts/metrics.json` under `comparison`.
 
-10,127 credit card customers from the BankChurners dataset (Kaggle), 23 raw columns covering demographics, product relationship, and 12 months of transaction behavior. Target: whether the customer attrited. 1,627 of 10,127 customers churned, a 16.1% positive class.
+**Class weighting, not SMOTE.** At 16% positives an unweighted model is accurate and useless. `class_weight="balanced"` reweights inside the loss with no synthetic rows and nothing new to tune.
 
-Cleaning steps (`bankchurners_cleaning.ipynb`):
-
-- **Leakage removal.** The raw file ships with two `Naive_Bayes_Classifier_*` columns, which are predictions from another model trained on this same target. Keeping them would leak the answer into the features, so they are dropped programmatically.
-- **Encoded missing values.** Three categorical columns encode missingness as the string "Unknown" (Education_Level: 1,519; Income_Category: 1,112; Marital_Status: 749). These are recoded to NaN so missingness is visible instead of silently becoming a category.
-- **Identifier handling.** `CLIENTNUM` becomes the index: rows stay traceable, but the ID can never enter a model as a feature.
-- **Ordered categoricals.** Income and card tier are stored as ordered categories so sorts and group-bys respect real-world order.
-
-## Method
-
-**Feature selection.** EDA (`bankchurners_eda.ipynb`) ranked all numeric features by correlation with churn and verified the top candidates with KDE distribution overlays of churned vs retained customers. The model uses the top 5 behavioral features: `Total_Trans_Ct`, `Total_Ct_Chng_Q4_Q1`, `Total_Revolving_Bal`, `Contacts_Count_12_mon`, `Months_Inactive_12_mon`. Demographics (gender, income) are deliberately excluded from the features.
-
-**Model** (`bankchurners_model.ipynb`): logistic regression on a stratified 80/20 split (`random_state=42`), features standardized with a scaler fit on the training set only.
-
-**Class imbalance: class weighting, not SMOTE.** With 16% positives, an unweighted model maximizes accuracy by ignoring churners. `class_weight='balanced'` reweights errors inversely to class frequency (roughly 5.2x weight on churners) inside the loss function. I chose it over SMOTE because it involves no synthetic data, adds no hyperparameters, and keeps the pipeline simple and auditable; I did not run a SMOTE comparison, which is listed under limitations.
-
-**Threshold analysis.** The model outputs probabilities, and the flagging threshold is a business decision about retention team capacity. Sweeping it on the test set:
-
-| Threshold | Recall | Precision | Customers flagged |
-|-----------|--------|-----------|-------------------|
-| 0.3 | 0.889 | 0.319 | 906 |
-| 0.4 | 0.822 | 0.364 | 733 |
-| 0.5 | 0.766 | 0.415 | 600 |
-| 0.6 | 0.717 | 0.511 | 456 |
-| 0.7 | 0.603 | 0.589 | 333 |
-
-A team that can contact ~900 customers catches 89% of churners at threshold 0.3; a smaller team gets better precision at a higher threshold.
+**Fairness is audited on the saved artifact, not on a rebuilt model.** Gender and income are not features. `audit/fairness_audit.py` loads `artifacts/model.joblib` and the saved test rows and measures recall, precision, and selection rate per group, because excluding an attribute does not stop behavioural features from acting as proxies for it.
 
 ## Results
 
-- **ROC-AUC 0.870** on the held-out test set (2,026 customers).
-- **Up to 89% churner recall** (threshold 0.3); at the default 0.5 threshold, recall 0.766 and precision 0.415.
-- Standardized coefficients agree with the EDA: transaction count is the dominant signal (-1.355), followed by revolving balance (-0.634), quarter-over-quarter transaction change (-0.584), months inactive (+0.500), and contact count (+0.498). Customers who transact less, carry no revolving balance, go inactive, and contact the bank repeatedly are the ones leaving.
+Test set: 2,026 customers, 325 churners. Feature ranking and the capacity curve were computed on the training split only; the test set was scored once.
+
+| | Logistic regression (shipped) | HistGradientBoosting | Rank by transaction count, no model |
+|---|---|---|---|
+| ROC-AUC on test | 0.871 (95% bootstrap CI 0.850 to 0.892) | 0.921 | 0.792 |
+| Recall at 900 flagged | 0.889 | 0.945 | 0.883 |
+| Recall at 600 flagged | 0.766 | 0.874 | 0.723 |
+| Recall at 300 flagged | 0.569 | 0.655 | 0.252 |
+
+Capacity curve for the shipped model, 5-fold cross-validated on the training set and stated per 2,026 customers scored (the test-set numbers at the same capacities are within two points of these):
+
+| Customers flagged | Recall | Precision |
+|---|---|---|
+| 300 | 0.581 | 0.631 |
+| 450 | 0.720 | 0.521 |
+| 600 | 0.808 | 0.439 |
+| 750 | 0.862 | 0.374 |
+| 900 | 0.909 | 0.329 |
+
+Standardised coefficients: transaction count is the dominant signal (-1.355), then revolving balance (-0.634), quarter-over-quarter transaction change (-0.584), months inactive (+0.500), and contact count (+0.498). Customers who transact less, carry no revolving balance, go inactive, and contact the bank repeatedly are the ones leaving.
+
+On feature selection: the five features are the three strongest negative and the two strongest positive correlations with churn on the training rows. `Avg_Utilization_Ratio` ranks fifth by absolute correlation but is 0.62 correlated with revolving balance, which is already in. The ranking on training rows has the same order as on the full file, so moving selection inside the split changed nothing about the feature set, and now that is a recorded fact rather than an assumption.
 
 ## Fairness audit
 
-Gender and income are not model inputs, but excluding an attribute does not guarantee the model treats those groups the same: behavioral features can act as proxies. That is the logic of fair lending review (ECOA/Reg B), so `audit/fairness_audit.py` rebuilds the exact model and audits its test-set predictions across Gender and Income_Category at threshold 0.5. Full numbers in [`audit/fairness_report.json`](audit/fairness_report.json).
+`audit/fairness_audit.py` audits the shipped artifact's test-set predictions across Gender and Income_Category at threshold 0.5 (600 flagged). Full numbers in [`audit/fairness_report.json`](audit/fairness_report.json).
 
 ![Per-group recall and precision](audit/fairness_audit.png)
 
-What the audit measures and what it found:
+- **Base rates:** women churn more than men (17.4% vs 14.6%, chi-squared p = 0.0002); income slices range from 13.5% to 17.3%, highest at both extremes (p = 0.015).
+- **Equal opportunity difference** (recall gap): 0.079 by gender (F 0.80 vs M 0.72). By income it is 0.233, driven by the $120K+ slice, which has only 21 actual churners in the test set.
+- **Demographic parity difference** (selection rate gap): 0.087 by gender, with men flagged more often (34.3% vs 25.6%), and 0.103 by income.
+- **Precision by group:** lower for men (0.32 vs 0.52), so a larger share of flagged men are false alarms.
 
-- **Per-group churn rates** (base rates): women churn more than men (17.4% vs 14.6%, chi-squared p = 0.0002); income slices range 13.5% to 17.3%, highest at both extremes (chi-squared p = 0.015).
-- **Equal opportunity difference** (recall gap; are actual churners equally likely to be caught?): 0.079 by gender (F 0.80 vs M 0.72). By income it is 0.233, but that gap is driven by the $120K+ slice, which has only 21 actual churners in the test set, so its recall estimate is noisy.
-- **Demographic parity difference** (selection rate gap; are groups flagged at equal rates?): 0.087 by gender, with men flagged more often (34.3% vs 25.6%), and 0.103 by income. Chi-squared tests on group vs model flag are significant for both (gender p < 0.001, income p = 0.012).
-- **Precision by group**: notably lower for men (0.32 vs 0.52), meaning a larger share of flagged men are false alarms.
+The gender gaps run in the opposite direction of the base rates, so this is model behaviour, not a reflection of the data. The intervention is a retention offer, not a credit decision, so the cost of the disparity is wasted outreach and unevenly missed churners. The audit is threshold dependent and must be re-run at whatever capacity the business deploys. `tests/test_fairness.py` fails CI if the gender recall gap at threshold 0.5 reaches 0.10.
 
-**Reading of the results:** the model over-flags men relative to their lower actual churn rate while catching a slightly smaller share of male churners, and the gender gaps run in the opposite direction of the base rates, so this is model behavior, not just a reflection of the data. The gaps are moderate rather than severe, and the intervention is a retention offer, not a credit denial, so the main cost of the disparity is wasted outreach and unevenly missed churners. In production I would monitor these gaps over time, review per-group thresholds, and re-audit at whatever threshold the business actually deploys, since the audit is threshold-dependent.
+## What breaks and what catches it
+
+| Risk | Guard |
+|---|---|
+| Leakage columns reappear in a new extract | contract rejects any column starting with `Naive_Bayes` |
+| Customer ID or a demographic column enters the features | test asserts the feature matrix is exactly `FEATURES` |
+| Scaler fit on the wrong split | scaler lives inside the sklearn Pipeline; there is no separate transform step to get wrong |
+| Model and audit drift apart | audit loads the artifact; there is one model definition |
+| Scoring data drifts from training data | PSI per feature on every batch; warning above 0.2, refuses above 0.5 without `--force` |
+| Retrain produces different numbers | CI retrains and compares to `metrics.json` |
+| Income band spelled differently in new data | contract rejects values outside the known bands |
+| A retrain widens the gender recall gap | fairness gate test fails the build at 0.10 |
 
 ## Repository guide
 
-| File | Contents |
-|------|----------|
-| `bankchurners_cleaning.ipynb` | Raw Excel to clean CSV: leakage removal, missing values, types |
-| `bankchurners_eda.ipynb` | Churn rates by segment, correlation ranking, top-5 distributions |
-| `bankchurners_model.ipynb` | Split, scaling, weighted logistic regression, threshold sweep |
-| `audit/fairness_audit.py` | Fairness metrics and figure; writes `fairness_report.json` |
+| Path | Contents |
+|---|---|
+| `churn/features.py` | feature list, target, forbidden prefixes, income order, reason text; the only place these are defined |
+| `churn/contract.py` | input data contract used by train and predict; errors name the column |
+| `churn/train.py` | split, selection on train rows, pipeline fit, CV capacity curve, bootstrap CI, comparison models, writes `artifacts/` |
+| `churn/predict.py` | score a CSV, apply capacity or threshold, write reason codes, drift gate |
+| `churn/drift.py` | PSI between training bins and a scoring batch |
+| `artifacts/` | `model.joblib`, `metrics.json`, `test_index.json`, `feature_bins.json` |
+| `audit/fairness_audit.py` | per-group metrics from the artifact; writes the report and figure |
+| `bankchurners_cleaning.ipynb` | raw Excel to clean CSV: leakage removal, missing values, types |
+| `bankchurners_eda.ipynb` | churn rates by segment, correlation ranking, top-5 distributions |
+| `bankchurners_model.ipynb` | the original notebook walk-through of the split, scaling, and threshold sweep |
+| `tests/` | contract, leakage, reproducibility, evaluation, prediction, drift, fairness gate |
 
-Run order: cleaning notebook, then EDA, then model (each top to bottom), then `python audit/fairness_audit.py` from the project root.
+## Run
+
+```bash
+pip install -e ".[dev]"
+python -m churn.train                                                   # writes artifacts/
+python -m churn.predict batch.csv --capacity 900 --out outreach.csv     # batch.csv has the clean CSV's columns
+python audit/fairness_audit.py
+pytest
+```
+
+`requirements.txt` is kept in sync for anyone who installs with `pip install -r`.
+
+## Data
+
+BankChurners, 10,127 credit card customers, from the Kaggle dataset "Credit Card customers" by Sakshi Goyal (licence as listed on the Kaggle page). Cleaning is in `bankchurners_cleaning.ipynb`: two `Naive_Bayes_Classifier_*` columns dropped by prefix because they are predictions on this same target, "Unknown" recoded to NaN (Education 1,519; Income 1,112; Marital 749), `CLIENTNUM` as index so it can never enter the feature matrix, ordered categoricals for income and card tier. Target: 1,627 of 10,127 customers churned, 16.1%.
 
 ## Limitations
 
-- **Feature selection is univariate.** Ranking by correlation with the target misses interactions and non-linear effects; a tree-based model or L1 selection could surface features this approach ignores.
-- **No SMOTE comparison was run.** Class weighting was chosen on reasoning (no synthetic data, simpler pipeline), not on a measured head-to-head.
-- **The threshold sweep is evaluated on the test set.** Picking an operating threshold from the same data that reports final metrics is mildly optimistic; a validation split or cross-validation would be cleaner.
-- **Thin slices limit the fairness audit.** The $120K+ group has 21 test-set churners, so its recall estimate carries wide uncertainty; the audit reports group sizes alongside every metric for this reason.
-- **Single snapshot, single model.** One dataset vintage, one logistic regression. No temporal validation, and churn behavior drifts.
+Single snapshot with no temporal validation, and churn behaviour drifts; the PSI check is a tripwire, not a solution. The fairness audit must be re-run at whatever capacity the business deploys. The $120K+ income slice has 21 test-set churners and its recall estimate is noisy. Feature selection is univariate and misses interactions; the gradient boosting comparison is the measure of how much that costs, and it is about five AUC points.
+
+## What this is not
+
+Not a production service. There is no API, no scheduler, no model registry. It is the part of the work that has to be right before any of those are worth building.
