@@ -1,9 +1,14 @@
 """Fairness audit for the bank churn logistic regression model.
 
-Rebuilds the exact model from bankchurners_model.ipynb (same top 5 features,
-same stratified 80/20 split with random_state=42, same StandardScaler and
-class-weighted LogisticRegression), then measures how its test-set predictions
-behave across Gender and Income_Category groups at the chosen threshold of 0.5.
+Loads the shipped artifact (artifacts/model.joblib) and the held-out rows it
+was evaluated on (artifacts/test_index.json), then measures how its test-set
+predictions behave across Gender and Income_Category groups at the chosen
+threshold of 0.5.
+
+The audit does not retrain anything. There is one model definition, in
+churn/train.py, and this script reads its output. That is what makes "audits
+the exact model" true by construction rather than by agreement on a random
+seed.
 
 Gender and income are deliberately excluded from the model's features. This
 audit checks whether the model is nevertheless disparate across those groups
@@ -12,61 +17,52 @@ audits work in banking: absence of the attribute does not guarantee absence
 of disparate impact.
 
 Outputs: audit/fairness_report.json and audit/fairness_audit.png.
-Run from the project root: python audit/fairness_audit.py
+Run from the project root after python -m churn.train:
+    python audit/fairness_audit.py
 """
 
 import json
+import sys
 from pathlib import Path
 
+import joblib
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import chi2_contingency
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_score, recall_score
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 
-DATA_PATH = Path(__file__).parent.parent / "bankchurners_clean.csv"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from churn.contract import feature_matrix, validate  # noqa: E402
+from churn.features import ID_COLUMN, INCOME_ORDER, PROTECTED_ATTRIBUTES, TARGET  # noqa: E402
+
+DATA_PATH = PROJECT_ROOT / "bankchurners_clean.csv"
+ARTIFACT_DIR = PROJECT_ROOT / "artifacts"
 OUT_DIR = Path(__file__).parent
 
-TOP5 = [
-    "Total_Trans_Ct",
-    "Total_Ct_Chng_Q4_Q1",
-    "Total_Revolving_Bal",
-    "Contacts_Count_12_mon",
-    "Months_Inactive_12_mon",
-]
 THRESHOLD = 0.5
-INCOME_ORDER = [
-    "Less than $40K",
-    "$40K - $60K",
-    "$60K - $80K",
-    "$80K - $120K",
-    "$120K +",
-]
 
 
-def build_test_predictions(df):
-    """Retrain the notebook's exact model and return the test rows with
+def load_artifact(artifact_dir=ARTIFACT_DIR):
+    """The trained pipeline, its metrics, and the test-row identifiers."""
+    model = joblib.load(artifact_dir / "model.joblib")
+    metrics = json.loads((artifact_dir / "metrics.json").read_text())
+    test_index = json.loads((artifact_dir / "test_index.json").read_text())
+    return model, metrics, test_index
+
+
+def build_test_predictions(df, model, test_index):
+    """Score the held-out rows with the shipped model and return them with
     true labels, predicted probabilities, and flags at the chosen threshold."""
-    X = df[TOP5]
-    y = df["Churned"]
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
-    )
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    model = LogisticRegression(
-        class_weight="balanced", max_iter=1000, random_state=42
-    )
-    model.fit(X_train_scaled, y_train)
-
-    test = df.loc[X_test.index, ["Gender", "Income_Category"]].copy()
-    test["y_true"] = y_test
-    test["y_prob"] = model.predict_proba(X_test_scaled)[:, 1]
+    test_df = df.loc[test_index]
+    test = test_df[PROTECTED_ATTRIBUTES].copy()
+    test["y_true"] = test_df[TARGET].astype(int)
+    test["y_prob"] = model.predict_proba(feature_matrix(test_df))[:, 1]
     test["y_flag"] = (test["y_prob"] >= THRESHOLD).astype(int)
     return test
 
@@ -145,7 +141,7 @@ def make_figure(report, out_path):
     """One grouped bar chart: recall and precision per group, with dashed
     lines marking the overall test-set values for comparison."""
     groups, recalls, precisions = [], [], []
-    for attr in ["Gender", "Income_Category"]:
+    for attr in PROTECTED_ATTRIBUTES:
         keys = list(report["groups"][attr]["test_set_metrics"].keys())
         if attr == "Income_Category":
             keys = [k for k in INCOME_ORDER if k in keys]
@@ -208,8 +204,9 @@ def make_figure(report, out_path):
 
 
 def main():
-    df = pd.read_csv(DATA_PATH, index_col="CLIENTNUM")
-    test = build_test_predictions(df)
+    df = validate(pd.read_csv(DATA_PATH, index_col=ID_COLUMN))
+    model, metrics, test_index = load_artifact()
+    test = build_test_predictions(df, model, test_index)
 
     overall = {
         "recall": round(recall_score(test["y_true"], test["y_flag"]), 4),
@@ -218,8 +215,9 @@ def main():
     }
 
     report = {
-        "model": "LogisticRegression(class_weight='balanced') on top 5 "
-                 "behavioral features, stratified 80/20 split, random_state=42",
+        "model": metrics["model"],
+        "artifact": "artifacts/model.joblib",
+        "trained_at": metrics["provenance"]["trained_at"],
         "threshold": THRESHOLD,
         "test_set_size": int(len(test)),
         "overall": overall,
@@ -227,10 +225,7 @@ def main():
                 "are excluded from income slices only. Groups with few actual "
                 "churners in the test set give noisy recall estimates, so "
                 "n_churners is reported alongside every metric.",
-        "groups": {
-            "Gender": audit_attribute(df, test, "Gender"),
-            "Income_Category": audit_attribute(df, test, "Income_Category"),
-        },
+        "groups": {attr: audit_attribute(df, test, attr) for attr in PROTECTED_ATTRIBUTES},
     }
 
     out_json = OUT_DIR / "fairness_report.json"

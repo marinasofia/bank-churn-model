@@ -1,5 +1,7 @@
 {
-  "model": "LogisticRegression(class_weight='balanced') on top 5 behavioral features, stratified 80/20 split, random_state=42",
+  "model": "Pipeline(StandardScaler, LogisticRegression(class_weight='balanced'))",
+  "artifact": "artifacts/model.joblib",
+  "trained_at": "2026-09-03T20:24:11+00:00",
   "threshold": 0.5,
   "test_set_size": 2026,
   "overall": {
