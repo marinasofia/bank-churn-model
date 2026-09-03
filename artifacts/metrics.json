@@ -298,6 +298,6 @@
     "data_file": "bankchurners_clean.csv",
     "data_sha256": "1c2673cc17593d8e9cfad941ffd122fe8ca17c81f2123ee8ec8393531367fec2",
     "sklearn_version": "1.9.0",
-    "trained_at": "2026-09-03T20:27:37+00:00"
+    "trained_at": "2026-09-03T20:29:09+00:00"
   }
 }

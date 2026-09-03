@@ -6,6 +6,7 @@ Writes:
     artifacts/model.joblib      sklearn Pipeline(StandardScaler, LogisticRegression)
     artifacts/metrics.json      test metrics, threshold table, coefficients, provenance
     artifacts/test_index.json   CLIENTNUM values of the held-out rows
+    artifacts/feature_bins.json decile bins of each training feature, for the drift check
 
 The scaler lives inside the Pipeline on purpose. Every consumer (audit,
 prediction, tests) calls predict_proba on raw features, so there is no
@@ -30,6 +31,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from churn.contract import feature_matrix, validate
+from churn.drift import training_bins
 from churn.features import FEATURES, ID_COLUMN, TARGET
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -244,6 +246,9 @@ def train(data_path: Path = DEFAULT_DATA, out_dir: Path = DEFAULT_OUT) -> dict:
     (out_dir / "test_index.json").write_text(
         json.dumps([int(i) for i in X_test.index]) + "\n"
     )
+    (out_dir / "feature_bins.json").write_text(
+        json.dumps(training_bins(X_train), indent=2) + "\n"
+    )
     return metrics
 
 
@@ -257,6 +262,7 @@ def main():
     print(f"Wrote {args.out / 'model.joblib'}")
     print(f"Wrote {args.out / 'metrics.json'}")
     print(f"Wrote {args.out / 'test_index.json'}")
+    print(f"Wrote {args.out / 'feature_bins.json'}")
     ci = metrics["test"]["roc_auc_ci95"]
     print(f"Test ROC-AUC: {metrics['test']['roc_auc']} (95% CI {ci['low']} to {ci['high']})")
     print(f"Out-of-fold ROC-AUC on train: {metrics['cross_validation']['roc_auc_oof']}")
