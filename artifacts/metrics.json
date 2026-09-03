@@ -1,0 +1,66 @@
+{
+  "model": "Pipeline(StandardScaler, LogisticRegression(class_weight='balanced'))",
+  "features": [
+    "Total_Trans_Ct",
+    "Total_Ct_Chng_Q4_Q1",
+    "Total_Revolving_Bal",
+    "Contacts_Count_12_mon",
+    "Months_Inactive_12_mon"
+  ],
+  "split": {
+    "test_size": 0.2,
+    "stratified": true,
+    "random_state": 42,
+    "n_train": 8101,
+    "n_test": 2026,
+    "n_test_churners": 325
+  },
+  "test": {
+    "roc_auc": 0.8705,
+    "threshold_table": [
+      {
+        "threshold": 0.3,
+        "recall": 0.8892,
+        "precision": 0.319,
+        "flagged": 906
+      },
+      {
+        "threshold": 0.4,
+        "recall": 0.8215,
+        "precision": 0.3643,
+        "flagged": 733
+      },
+      {
+        "threshold": 0.5,
+        "recall": 0.7662,
+        "precision": 0.415,
+        "flagged": 600
+      },
+      {
+        "threshold": 0.6,
+        "recall": 0.7169,
+        "precision": 0.511,
+        "flagged": 456
+      },
+      {
+        "threshold": 0.7,
+        "recall": 0.6031,
+        "precision": 0.5886,
+        "flagged": 333
+      }
+    ]
+  },
+  "coefficients_standardized": {
+    "Total_Trans_Ct": -1.3548,
+    "Total_Ct_Chng_Q4_Q1": -0.5842,
+    "Total_Revolving_Bal": -0.6338,
+    "Contacts_Count_12_mon": 0.4979,
+    "Months_Inactive_12_mon": 0.5
+  },
+  "provenance": {
+    "data_file": "bankchurners_clean.csv",
+    "data_sha256": "1c2673cc17593d8e9cfad941ffd122fe8ca17c81f2123ee8ec8393531367fec2",
+    "sklearn_version": "1.9.0",
+    "trained_at": "2026-09-03T20:24:11+00:00"
+  }
+}
