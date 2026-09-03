@@ -7,6 +7,76 @@
     "Contacts_Count_12_mon",
     "Months_Inactive_12_mon"
   ],
+  "feature_selection": {
+    "method": "absolute Pearson correlation with the target, training rows only",
+    "ranking": [
+      {
+        "feature": "Total_Trans_Ct",
+        "abs_corr": 0.3725
+      },
+      {
+        "feature": "Total_Ct_Chng_Q4_Q1",
+        "abs_corr": 0.2865
+      },
+      {
+        "feature": "Total_Revolving_Bal",
+        "abs_corr": 0.2676
+      },
+      {
+        "feature": "Contacts_Count_12_mon",
+        "abs_corr": 0.2055
+      },
+      {
+        "feature": "Avg_Utilization_Ratio",
+        "abs_corr": 0.1885
+      },
+      {
+        "feature": "Total_Trans_Amt",
+        "abs_corr": 0.1735
+      },
+      {
+        "feature": "Months_Inactive_12_mon",
+        "abs_corr": 0.1579
+      },
+      {
+        "feature": "Total_Relationship_Count",
+        "abs_corr": 0.1571
+      },
+      {
+        "feature": "Total_Amt_Chng_Q4_Q1",
+        "abs_corr": 0.1292
+      },
+      {
+        "feature": "Dependent_count",
+        "abs_corr": 0.0309
+      },
+      {
+        "feature": "Credit_Limit",
+        "abs_corr": 0.024
+      },
+      {
+        "feature": "Customer_Age",
+        "abs_corr": 0.0173
+      },
+      {
+        "feature": "Months_on_book",
+        "abs_corr": 0.0081
+      },
+      {
+        "feature": "Avg_Open_To_Buy",
+        "abs_corr": 0.0002
+      }
+    ],
+    "top_by_correlation": [
+      "Total_Trans_Ct",
+      "Total_Ct_Chng_Q4_Q1",
+      "Total_Revolving_Bal",
+      "Contacts_Count_12_mon",
+      "Avg_Utilization_Ratio"
+    ],
+    "top_matches_features": false,
+    "note": "FEATURES are the three strongest negative and the two strongest positive correlations, not the top five by absolute value. Avg_Utilization_Ratio ranks fifth by absolute correlation but is 0.62 correlated with Total_Revolving_Bal, which is already in. The ranking on training rows has the same order as on the full file."
+  },
   "split": {
     "test_size": 0.2,
     "stratified": true,
@@ -15,8 +85,54 @@
     "n_test": 2026,
     "n_test_churners": 325
   },
+  "cross_validation": {
+    "folds": 5,
+    "roc_auc_oof": 0.8836,
+    "capacity_curve": [
+      {
+        "capacity": 300,
+        "share_flagged": 0.1481,
+        "flagged_here": 1200,
+        "recall": 0.5814,
+        "precision": 0.6308
+      },
+      {
+        "capacity": 450,
+        "share_flagged": 0.2221,
+        "flagged_here": 1799,
+        "recall": 0.7204,
+        "precision": 0.5214
+      },
+      {
+        "capacity": 600,
+        "share_flagged": 0.2961,
+        "flagged_here": 2399,
+        "recall": 0.808,
+        "precision": 0.4385
+      },
+      {
+        "capacity": 750,
+        "share_flagged": 0.3702,
+        "flagged_here": 2999,
+        "recall": 0.8618,
+        "precision": 0.3741
+      },
+      {
+        "capacity": 900,
+        "share_flagged": 0.4443,
+        "flagged_here": 3599,
+        "recall": 0.9094,
+        "precision": 0.329
+      }
+    ]
+  },
   "test": {
     "roc_auc": 0.8705,
+    "roc_auc_ci95": {
+      "low": 0.8502,
+      "high": 0.8919,
+      "resamples": 1000
+    },
     "threshold_table": [
       {
         "threshold": 0.3,
@@ -48,7 +164,128 @@
         "precision": 0.5886,
         "flagged": 333
       }
+    ],
+    "capacity_curve": [
+      {
+        "capacity": 300,
+        "share_flagged": 0.1481,
+        "flagged_here": 300,
+        "recall": 0.5692,
+        "precision": 0.6167
+      },
+      {
+        "capacity": 450,
+        "share_flagged": 0.2221,
+        "flagged_here": 450,
+        "recall": 0.7138,
+        "precision": 0.5156
+      },
+      {
+        "capacity": 600,
+        "share_flagged": 0.2962,
+        "flagged_here": 600,
+        "recall": 0.7662,
+        "precision": 0.415
+      },
+      {
+        "capacity": 750,
+        "share_flagged": 0.3702,
+        "flagged_here": 750,
+        "recall": 0.8277,
+        "precision": 0.3587
+      },
+      {
+        "capacity": 900,
+        "share_flagged": 0.4442,
+        "flagged_here": 900,
+        "recall": 0.8892,
+        "precision": 0.3211
+      }
     ]
+  },
+  "comparison": {
+    "rank_by_total_trans_ct": {
+      "description": "flag the customers with the fewest transactions, no model",
+      "roc_auc": 0.7923,
+      "capacity_curve_test": [
+        {
+          "capacity": 300,
+          "share_flagged": 0.1481,
+          "flagged_here": 300,
+          "recall": 0.2523,
+          "precision": 0.2733
+        },
+        {
+          "capacity": 450,
+          "share_flagged": 0.2221,
+          "flagged_here": 450,
+          "recall": 0.5015,
+          "precision": 0.3622
+        },
+        {
+          "capacity": 600,
+          "share_flagged": 0.2962,
+          "flagged_here": 600,
+          "recall": 0.7231,
+          "precision": 0.3917
+        },
+        {
+          "capacity": 750,
+          "share_flagged": 0.3702,
+          "flagged_here": 750,
+          "recall": 0.8308,
+          "precision": 0.36
+        },
+        {
+          "capacity": 900,
+          "share_flagged": 0.4442,
+          "flagged_here": 900,
+          "recall": 0.8831,
+          "precision": 0.3189
+        }
+      ]
+    },
+    "hist_gradient_boosting": {
+      "description": "HistGradientBoostingClassifier, defaults, class_weight='balanced'",
+      "roc_auc": 0.9206,
+      "capacity_curve_test": [
+        {
+          "capacity": 300,
+          "share_flagged": 0.1481,
+          "flagged_here": 300,
+          "recall": 0.6554,
+          "precision": 0.71
+        },
+        {
+          "capacity": 450,
+          "share_flagged": 0.2221,
+          "flagged_here": 450,
+          "recall": 0.7815,
+          "precision": 0.5644
+        },
+        {
+          "capacity": 600,
+          "share_flagged": 0.2962,
+          "flagged_here": 600,
+          "recall": 0.8738,
+          "precision": 0.4733
+        },
+        {
+          "capacity": 750,
+          "share_flagged": 0.3702,
+          "flagged_here": 750,
+          "recall": 0.9231,
+          "precision": 0.4
+        },
+        {
+          "capacity": 900,
+          "share_flagged": 0.4442,
+          "flagged_here": 900,
+          "recall": 0.9446,
+          "precision": 0.3411
+        }
+      ]
+    }
   },
   "coefficients_standardized": {
     "Total_Trans_Ct": -1.3548,
@@ -61,6 +298,6 @@
     "data_file": "bankchurners_clean.csv",
     "data_sha256": "1c2673cc17593d8e9cfad941ffd122fe8ca17c81f2123ee8ec8393531367fec2",
     "sklearn_version": "1.9.0",
-    "trained_at": "2026-09-03T20:24:11+00:00"
+    "trained_at": "2026-09-03T20:27:37+00:00"
   }
 }
