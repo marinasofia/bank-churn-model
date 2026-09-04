@@ -94,6 +94,13 @@ The gender gaps run in the opposite direction of the base rates, so this is mode
 | Income band spelled differently in new data | contract rejects values outside the known bands |
 | A retrain widens the gender recall gap | fairness gate test fails the build at 0.10 |
 
+Scoring rejects empty batches, duplicate or missing customer IDs, nonfinite
+features, fractional counts, and missing labels when supplied. Selection requires
+exactly one positive integer capacity or a finite threshold in `[0, 1]`. Ranking
+and thresholding retain full probability precision, with stable input order for
+ties. Outreach files are replaced only after a complete write. See the
+[scoring contract](docs/scoring-contract.md) for errors and operating limits.
+
 ## Repository guide
 
 | Path | Contents |

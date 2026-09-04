@@ -5,6 +5,11 @@ development branch; they do not imply a published package or deployed site.
 
 ## Unreleased
 
+### Fixed
+
+- Reject malformed customer batches and invalid selection policies before inference.
+- Rank with full probability precision and preserve existing outreach files on failed saves.
+
 ### Added
 
 - Contributor, conduct, and private security-reporting policies.
