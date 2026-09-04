@@ -1,8 +1,45 @@
+# Operating systems and editors
 .DS_Store
-.ipynb_checkpoints/
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local secrets and diagnostics
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.log
+
+# Python environments, builds, and caches
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
+venv/
+env/
 *.egg-info/
+*.egg
+.eggs/
+build/
+dist/
 .pytest_cache/
+.mypy_cache/
 .ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
+.ipynb_checkpoints/
+
+# Keep committed source data and reference artifacts visible
+/outputs/
+/outreach.csv
+~$*.xlsx

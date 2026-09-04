@@ -2,6 +2,37 @@
 
 Flags credit card customers likely to leave, sizes the outreach list to the retention team's capacity, and audits whether the model treats customer groups equitably. Ships as a small package with a training entrypoint, a saved model artifact, a prediction CLI with reason codes, a drift check, and tests that run in CI.
 
+[![CI](https://github.com/marinasofia/bank-churn-model/actions/workflows/ci.yml/badge.svg)](https://github.com/marinasofia/bank-churn-model/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+
+## Quickstart
+
+Requires Python 3.12 or newer. Run from the checkout; the default artifact paths
+depend on it. The sample scores the committed dataset with the committed model.
+It demonstrates the CLI, not a fresh held-out evaluation.
+
+```bash
+git clone https://github.com/marinasofia/bank-churn-model.git
+cd bank-churn-model
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"
+mkdir -p outputs
+.venv/bin/python -m churn.predict bankchurners_clean.csv --capacity 900 --out outputs/outreach.csv
+.venv/bin/python -m pytest -q
+```
+
+Expect 900 selected rows plus a CSV header and per-feature drift statistics.
+Only load artifacts you trust: joblib model loading executes Python object
+deserialization. No API key or external service is required by this example.
+
+## Architecture
+
+`CSV -> contract -> features -> saved scaler/model -> drift gate -> ranked CSV`
+is the scoring path. `churn/train.py` builds the artifact bundle and evaluation
+metrics. The separate `audit/fairness_audit.py` evaluates the saved test split.
+Notebooks retain the exploratory history; the package supplies reusable code.
+
 ## The decisions that matter
 
 **The threshold is a capacity decision, not a modelling one.** The model outputs probabilities. `python -m churn.predict batch.csv --capacity N` returns the N customers most likely to churn, and the capacity curve below says what share of churners that catches. A team that can make 900 calls a month gets a different list from a team that can make 300, and neither needs to know what a threshold is.
@@ -14,7 +45,7 @@ Flags credit card customers likely to leave, sizes the outreach list to the rete
 
 ## Results
 
-Test set: 2,026 customers, 325 churners. Feature ranking and the capacity curve were computed on the training split only; the test set was scored once.
+Test set: 2,026 customers, 325 churners. The current training script reports feature ranking and cross-validated capacity curves from training rows. The feature list was chosen after exploratory analysis of this dataset, so these results do not establish an untouched historical holdout. A new external or temporal evaluation remains necessary.
 
 | | Logistic regression (shipped) | HistGradientBoosting | Rank by transaction count, no model |
 |---|---|---|---|
@@ -69,7 +100,7 @@ The gender gaps run in the opposite direction of the base rates, so this is mode
 |---|---|
 | `churn/features.py` | feature list, target, forbidden prefixes, income order, reason text; the only place these are defined |
 | `churn/contract.py` | input data contract used by train and predict; errors name the column |
-| `churn/train.py` | split, selection on train rows, pipeline fit, CV capacity curve, bootstrap CI, comparison models, writes `artifacts/` |
+| `churn/train.py` | split, training-row ranking of fixed features, pipeline fit, CV capacity curve, bootstrap CI, comparison models, writes artifacts |
 | `churn/predict.py` | score a CSV, apply capacity or threshold, write reason codes, drift gate |
 | `churn/drift.py` | PSI between training bins and a scoring batch |
 | `artifacts/` | `model.joblib`, `metrics.json`, `test_index.json`, `feature_bins.json` |
@@ -81,19 +112,28 @@ The gender gaps run in the opposite direction of the base rates, so this is mode
 
 ## Run
 
+After the quickstart, train into a separate directory to preserve the committed
+reference bundle:
+
 ```bash
-pip install -e ".[dev]"
-python -m churn.train                                                   # writes artifacts/
-python -m churn.predict batch.csv --capacity 900 --out outreach.csv     # batch.csv has the clean CSV's columns
-python audit/fairness_audit.py
-pytest
+.venv/bin/python -m churn.train --out outputs/retrained
+.venv/bin/python -m churn.predict bankchurners_clean.csv --artifacts outputs/retrained --capacity 900 --out outputs/retrained-outreach.csv
 ```
 
-`requirements.txt` is kept in sync for anyone who installs with `pip install -r`.
+For your own batch, supply a CSV with `CLIENTNUM` and the columns defined in
+[churn/features.py](churn/features.py). Use unique, nonmissing IDs, finite
+numeric features, a positive integer capacity, or a threshold from 0 to 1.
+The current contract does not reject every invalid case yet. `--force` overrides
+the drift refusal, so use it only after investigating the distribution change.
+
+`--artifacts`, `--capacity` or `--threshold`, and `--out` configure scoring.
+There is no environment-variable secret or service configuration. Dependencies
+are declared in `pyproject.toml`; `requirements.txt` provides a runtime install
+alternative, not a lockfile. See [CONTRIBUTING.md](CONTRIBUTING.md) for checks.
 
 ## Data
 
-BankChurners, 10,127 credit card customers, from the Kaggle dataset "Credit Card customers" by Sakshi Goyal (licence as listed on the Kaggle page). Cleaning is in `bankchurners_cleaning.ipynb`: two `Naive_Bayes_Classifier_*` columns dropped by prefix because they are predictions on this same target, "Unknown" recoded to NaN (Education 1,519; Income 1,112; Marital 749), `CLIENTNUM` as index so it can never enter the feature matrix, ordered categoricals for income and card tier. Target: 1,627 of 10,127 customers churned, 16.1%.
+BankChurners, 10,127 credit card customers, from ["Credit Card customers" by Sakshi Goyal on Kaggle](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers). The repository does not record an exact upstream version or license snapshot; see [data provenance](docs/data-provenance.md). Cleaning is in `bankchurners_cleaning.ipynb`: two `Naive_Bayes_Classifier_*` columns dropped by prefix because they are predictions on this same target, "Unknown" recoded to NaN (Education 1,519; Income 1,112; Marital 749), `CLIENTNUM` as index so it can never enter the feature matrix, ordered categoricals for income and card tier. Target: 1,627 of 10,127 customers churned, 16.1%.
 
 ## Limitations
 
@@ -102,3 +142,21 @@ Single snapshot with no temporal validation, and churn behaviour drifts; the PSI
 ## What this is not
 
 Not a production service. There is no API, no scheduler, no model registry. It is the part of the work that has to be right before any of those are worth building.
+
+
+## Development, status, and roadmap
+
+Offline research/MVP pipeline. Tests pass, but CI has no coverage gate; the
+September 4, 2026 baseline measured 86.1% line-plus-branch coverage on `churn/`.
+Installed-wheel defaults, input contracts, artifact compatibility, and operating
+point evaluation need further work before production use.
+
+TODO: complete the [scoring and model-bundle follow-up](https://github.com/marinasofia/bank-churn-model/issues/6).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [maintainer guidance](docs/maintenance.md),
+[SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and
+[CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+Repository code is [MIT licensed](LICENSE). Dataset terms are separate and
+must be checked against the upstream source described in the provenance note.
