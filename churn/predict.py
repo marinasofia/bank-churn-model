@@ -1,0 +1,213 @@
+"""Score a CSV of customers and write the outreach list.
+
+    python -m churn.predict new_month.csv --capacity 900 --out outreach.csv
+    python -m churn.predict new_month.csv --threshold 0.5 --out outreach.csv
+
+The input needs the same columns as bankchurners_clean.csv with CLIENTNUM as
+the first column; the Churned column is optional. Output columns:
+
+    CLIENTNUM, churn_probability, rank, reason_1, reason_2
+
+Reasons are the two features pushing that customer's probability up the most,
+in plain language, so a retention agent knows what to talk about.
+
+Before scoring, every feature is compared to the training distribution (PSI).
+Above 0.20 the run prints a warning; above 0.50 it exits with status 2 unless
+--force is given, because a model scoring data it has not seen the like of is
+worse than no score.
+"""
+
+import argparse
+import json
+import math
+import os
+import sys
+import tempfile
+from numbers import Integral, Real
+from pathlib import Path
+from typing import Any, Protocol
+
+import joblib
+import numpy as np
+import pandas as pd
+import sklearn
+
+from churn.contract import ContractError, feature_matrix, validate
+from churn.drift import REFUSE_AT, WARN_AT, psi, worst
+from churn.features import FEATURES, ID_COLUMN, REASON_TEXT
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_ARTIFACTS = PROJECT_ROOT / "artifacts"
+
+
+class ScoringModel(Protocol):
+    """The fitted binary pipeline interface required by the scoring service."""
+
+    named_steps: dict[str, Any]
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray: ...
+
+
+class DriftError(RuntimeError):
+    """Raised when the scoring data has drifted past the refuse threshold."""
+
+
+def validate_selection(capacity: int | None, threshold: float | None) -> None:
+    """Require exactly one finite, meaningful selection policy before inference."""
+    if (capacity is None) == (threshold is None):
+        raise ValueError("provide exactly one of capacity or threshold")
+    if capacity is not None and (
+        isinstance(capacity, bool) or not isinstance(capacity, Integral) or capacity <= 0
+    ):
+        raise ValueError("capacity must be a positive integer")
+    if threshold is not None and (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, Real)
+        or not math.isfinite(threshold)
+        or not 0 <= threshold <= 1
+    ):
+        raise ValueError("threshold must be a finite number between 0 and 1")
+
+
+def write_outreach(frame: pd.DataFrame, target: Path) -> None:
+    """Keep an existing outreach file intact if writing a new batch fails."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(prefix=f".{target.stem}-", suffix=".csv", dir=target.parent)
+    os.close(descriptor)
+    temporary = Path(name)
+    try:
+        frame.to_csv(temporary, index=True, index_label=ID_COLUMN)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def load_artifacts(artifact_dir: Path = DEFAULT_ARTIFACTS) -> tuple[ScoringModel, dict]:
+    metrics = json.loads((artifact_dir / "metrics.json").read_text())
+    trained_version = metrics.get("provenance", {}).get("sklearn_version")
+    if trained_version != sklearn.__version__:
+        raise ValueError(
+            f"Model requires scikit-learn {trained_version}; installed {sklearn.__version__}. "
+            "Use the project environment or retrain with the installed version."
+        )
+    model = joblib.load(artifact_dir / "model.joblib")
+    bins = json.loads((artifact_dir / "feature_bins.json").read_text())
+    return model, bins
+
+
+def reason_codes(model: ScoringModel, X: pd.DataFrame, top_n: int = 2) -> pd.DataFrame:
+    """Per row, the top_n features whose contribution (coefficient times
+    standardised value) pushes the churn probability up. Only positive
+    contributions count as reasons; a row with fewer than top_n gets blanks."""
+    scaler = model.named_steps["scaler"]
+    coefs = model.named_steps["model"].coef_[0]
+    scaled = scaler.transform(X)
+    contrib = scaled * coefs
+    order = np.argsort(-contrib, axis=1)
+    out = {}
+    for k in range(top_n):
+        idx = order[:, k]
+        positive = contrib[np.arange(len(X)), idx] > 0
+        names = np.array([REASON_TEXT[FEATURES[i]] for i in idx], dtype=object)
+        names[~positive] = ""
+        out[f"reason_{k + 1}"] = names
+    return pd.DataFrame(out, index=X.index)
+
+
+def score(
+    df: pd.DataFrame,
+    model: ScoringModel,
+    bins: dict,
+    capacity: int | None = None,
+    threshold: float | None = None,
+    force: bool = False,
+) -> tuple[pd.DataFrame, dict[str, float]]:
+    """Validate, check drift, score, rank, cut. Returns (outreach, psi_by_feature)."""
+    validate_selection(capacity, threshold)
+    validate(df, require_target=False)
+    X = feature_matrix(df)
+
+    drift = psi(bins, X)
+    col, value = worst(drift)
+    if value > REFUSE_AT and not force:
+        raise DriftError(
+            f"{col} has PSI {value:.3f} against the training data (limit {REFUSE_AT}). "
+            f"This batch does not look like what the model was trained on. "
+            f"Re-run with --force to score anyway."
+        )
+
+    probabilities = np.asarray(model.predict_proba(X))
+    if probabilities.shape != (len(X), 2) or not np.isfinite(probabilities).all():
+        raise ValueError("model must return two finite probabilities per customer")
+    if ((probabilities < 0) | (probabilities > 1)).any() or not np.allclose(
+        probabilities.sum(axis=1), 1
+    ):
+        raise ValueError("model probabilities must lie in [0, 1] and sum to one")
+    prob = probabilities[:, 1]
+    result = pd.DataFrame({"churn_probability": prob}, index=X.index)
+    result = result.join(reason_codes(model, X))
+    result = result.sort_values("churn_probability", ascending=False, kind="stable")
+    result["rank"] = np.arange(1, len(result) + 1)
+
+    if capacity is not None:
+        result = result.head(capacity)
+    elif threshold is not None:
+        result = result[result["churn_probability"] >= threshold]
+
+    cols = ["churn_probability", "rank", "reason_1", "reason_2"]
+    return result[cols], drift
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Score customers and write the outreach list.")
+    parser.add_argument(
+        "input", type=Path, help="CSV with the same columns as bankchurners_clean.csv"
+    )
+    cut = parser.add_mutually_exclusive_group(required=True)
+    cut.add_argument("--capacity", type=int, help="flag the N customers most likely to churn")
+    cut.add_argument("--threshold", type=float, help="flag customers at or above this probability")
+    parser.add_argument("--out", type=Path, default=Path("outreach.csv"))
+    parser.add_argument("--artifacts", type=Path, default=DEFAULT_ARTIFACTS)
+    parser.add_argument(
+        "--force", action="store_true", help="score even if drift is above the refuse limit"
+    )
+    args = parser.parse_args(argv)
+    try:
+        validate_selection(args.capacity, args.threshold)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    try:
+        df = pd.read_csv(args.input, index_col=ID_COLUMN)
+        validate(df, require_target=False)
+        model, bins = load_artifacts(args.artifacts)
+        outreach, drift = score(
+            df, model, bins, capacity=args.capacity, threshold=args.threshold, force=args.force
+        )
+    except DriftError as e:
+        print(f"Refusing to score: {e}", file=sys.stderr)
+        return 2
+    except (OSError, ContractError, ValueError) as exc:
+        print(f"Cannot score batch: {exc}", file=sys.stderr)
+        return 2
+
+    col, value = worst(drift)
+    if value > WARN_AT:
+        print(
+            f"Warning: {col} has PSI {value:.3f} against the training data. "
+            f"The scores are written, but look at this feature before acting on them.",
+            file=sys.stderr,
+        )
+
+    try:
+        write_outreach(outreach, args.out)
+    except OSError as exc:
+        print(f"Cannot write outreach: {exc}", file=sys.stderr)
+        return 2
+    print(f"Scored {len(df)} customers, wrote {len(outreach)} to {args.out}")
+    print("PSI by feature: " + ", ".join(f"{k} {v:.3f}" for k, v in drift.items()))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
