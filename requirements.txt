@@ -4,7 +4,7 @@
 # The notebooks are exploration and can be read in any order after that.
 pandas>=2.2
 numpy>=1.26
-scikit-learn==1.9.0
+scikit-learn==1.9.1
 scipy>=1.13
 matplotlib>=3.8
 joblib>=1.4
