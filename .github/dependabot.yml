@@ -11,6 +11,10 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      # The saved model only loads under the scikit-learn version it was trained with.
+      # Upgrade it together with a retrain, not through Dependabot.
+      - dependency-name: scikit-learn
     groups:
       uv:
         patterns: ["*"]
