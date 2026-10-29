@@ -13,7 +13,7 @@ A churn score on its own does not tell a retention team what to do on Monday. Th
 
 ## Quickstart
 
-Python 3.12 or newer and [uv](https://docs.astral.sh/uv/).
+Needs [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 automatically from `.python-version`.
 
 ```sh
 git clone https://github.com/marinasofia/bank-churn-model.git

@@ -3,7 +3,7 @@ name = "bank-churn-model"
 version = "0.1.0"
 description = "Credit card churn model with a capacity-based outreach list and a fairness audit"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "pandas>=2.2",
     "numpy>=1.26",

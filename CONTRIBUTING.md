@@ -5,7 +5,7 @@ examples in public reports. See [SECURITY.md](SECURITY.md) for private concerns.
 
 ## Development and validation
 
-Use Python 3.12 or newer and the checkout setup in [README.md](README.md).
+Use Python 3.12 or 3.13 and the checkout setup in [README.md](README.md).
 
 ```bash
 .venv/bin/python -m pytest -q
