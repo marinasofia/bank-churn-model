@@ -1,10 +1,9 @@
 import json
 
-import numpy as np
-
 from churn.contract import feature_matrix
 from churn.features import FEATURES
-from churn.train import train
+from churn.train import sha256_of, train
+from tests.conftest import DATA_PATH
 
 
 def test_train_is_reproducible(tmp_path, artifact):
@@ -28,5 +27,5 @@ def test_pipeline_scores_raw_frame(clean_df, artifact):
 def test_metrics_provenance_matches_data(artifact):
     _, metrics, _ = artifact
     assert metrics["features"] == FEATURES
-    assert len(metrics["provenance"]["data_sha256"]) == 64
+    assert metrics["provenance"]["data_sha256"] == sha256_of(DATA_PATH)
     assert metrics["split"]["n_test"] == 2026

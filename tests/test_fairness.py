@@ -1,11 +1,9 @@
 import sys
 from pathlib import Path
 
-import pandas as pd
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from audit.fairness_audit import (  # noqa: E402
+from audit.fairness_audit import (
     build_test_predictions,
     equal_opportunity_difference,
     group_prediction_metrics,

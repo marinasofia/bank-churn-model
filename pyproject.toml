@@ -34,3 +34,5 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+# The notebooks are exploratory history and are not linted.
+extend-exclude = ["*.ipynb"]
