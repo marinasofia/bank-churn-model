@@ -16,7 +16,7 @@ separate transform step that could be fitted on the wrong split.
 import argparse
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import joblib
@@ -56,7 +56,7 @@ def load_data(path: Path) -> pd.DataFrame:
     return validate(df, require_target=True)
 
 
-def split(df: pd.DataFrame):
+def split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     X = feature_matrix(df)
     y = df[TARGET].astype(int)
     return train_test_split(
@@ -111,7 +111,7 @@ def capacity_curve(y_true, y_score, population: int) -> list[dict]:
     order = np.argsort(-np.asarray(y_score), kind="stable")
     rows = []
     for n in CAPACITIES:
-        k = int(round(n * len(y_true) / population))
+        k = round(n * len(y_true) / population)
         flagged = np.zeros(len(y_true), dtype=int)
         flagged[order[:k]] = 1
         rows.append(
@@ -126,7 +126,9 @@ def capacity_curve(y_true, y_score, population: int) -> list[dict]:
     return rows
 
 
-def bootstrap_auc_ci(y_true, y_prob, n_resamples=BOOTSTRAP_RESAMPLES, seed=RANDOM_STATE):
+def bootstrap_auc_ci(
+    y_true, y_prob, n_resamples=BOOTSTRAP_RESAMPLES, seed=RANDOM_STATE
+) -> dict[str, float | int]:
     rng = np.random.default_rng(seed)
     y_true = np.asarray(y_true)
     y_prob = np.asarray(y_prob)
@@ -213,8 +215,8 @@ def train(data_path: Path = DEFAULT_DATA, out_dir: Path = DEFAULT_OUT) -> dict:
             "test_size": TEST_SIZE,
             "stratified": True,
             "random_state": RANDOM_STATE,
-            "n_train": int(len(X_train)),
-            "n_test": int(len(X_test)),
+            "n_train": len(X_train),
+            "n_test": len(X_test),
             "n_test_churners": int(y_test.sum()),
         },
         "cross_validation": {
@@ -236,7 +238,7 @@ def train(data_path: Path = DEFAULT_DATA, out_dir: Path = DEFAULT_OUT) -> dict:
             "data_file": data_path.name,
             "data_sha256": sha256_of(data_path),
             "sklearn_version": sklearn.__version__,
-            "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "trained_at": datetime.now(UTC).isoformat(timespec="seconds"),
         },
     }
 

@@ -5,7 +5,7 @@ A credit card churn model that turns a month of customer data into a ranked outr
 [![CI](https://github.com/marinasofia/bank-churn-model/actions/workflows/ci.yml/badge.svg)](https://github.com/marinasofia/bank-churn-model/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![Recall and precision by gender and income group on the held out test set, with overall recall 0.77 and precision 0.41 marked](audit/fairness_audit.png)
+![Recall and precision by gender and income group on the test set](audit/fairness_audit.png)
 
 ## Why I built it
 
@@ -13,7 +13,7 @@ A churn score on its own does not tell a retention team what to do on Monday. Th
 
 ## Quickstart
 
-Python 3.12 or newer and [uv](https://docs.astral.sh/uv/).
+Needs [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 automatically from `.python-version`.
 
 ```sh
 git clone https://github.com/marinasofia/bank-churn-model.git
@@ -110,6 +110,12 @@ Demographic parity difference is the largest gap in the share of each group the 
 * **Two fairness metrics.** Demographic parity checks who gets contacted. Equal opportunity checks whether churners in every group are equally likely to be caught. Gender and income are excluded from the features, and the audit measures whether behavioral features act as proxies for them anyway.
 * **Spreadsheet safe output.** The contract rejects identifiers that start with `=`, `+`, `-` or `@`, or that contain control characters, so the outreach CSV cannot carry a formula into Excel.
 
+## What I learned
+
+* **The threshold is a staffing decision.** Nobody on a retention team picks 0.5. They pick how many calls they can make, so the model is reported as calls per month: 300 calls catch 57% of churners, 900 calls catch 89% ([artifacts/metrics.json](artifacts/metrics.json), test capacity curve).
+* **Leaving gender and income out of the model did not remove the gaps.** The audit still finds a 0.087 selection rate gap by gender and a 0.233 recall gap by income ([audit/fairness_report.json](audit/fairness_report.json)). Behavioural features carry some of the same information, so fairness has to be measured, not assumed from the feature list.
+* **A 0.05 AUC gain was not worth losing the reason codes.** Gradient boosting reached 0.921 against 0.871 for logistic regression on the same test split ([artifacts/metrics.json](artifacts/metrics.json), `comparison`). The coefficients are what let the output say why each customer is on the list, and that is what the call is built on.
+
 ## Project layout
 
 ```text
@@ -122,20 +128,22 @@ churn/
 audit/          fairness audit script, report and chart
 artifacts/      saved model, metrics, feature bins, test split index
 docs/           scoring contract, technical reference, data provenance
-tests/          34 tests
+tests/          input contract, selection, drift, reason codes, training, fairness gate
 *.ipynb         cleaning, exploration and modeling notebooks
 ```
 
 ## Tests and CI
 
-CI installs the locked environment with uv, runs the 34 tests, retrains the model into a scratch folder to prove training still works, and reruns the fairness audit against the saved model. The tests cover the input contract, selection rules, drift refusal, reason codes, evaluation math and reproducible training.
+CI installs the locked environment with uv, runs ruff and the test suite, retrains the model into a scratch folder to prove training still works, and reruns the fairness audit against the saved model, failing if the committed report is stale. The tests cover the input contract, selection rules, drift refusal, reason codes, evaluation math and reproducible training.
 
 ## Data
 
-The [Credit Card customers dataset](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) by Sakshi Goyal, 10,127 customers. It is CC0 on Kaggle; the uploader sourced it from Analyttica LEAPS. See [data provenance](docs/data-provenance.md).
+The [Credit Card customers dataset](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers) by Sakshi Goyal, 10,127 customers. It is CC0 on Kaggle; the uploader sourced it from Analyttica LEAPS. See [data provenance](docs/data-provenance.md) and the [distributions of the five model features for churned and retained customers](docs/eda_top5_distributions.png) from the EDA notebook.
 
 ## More
 
-[Technical reference](docs/technical-reference.md) · [Scoring contract](docs/scoring-contract.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Model card](MODEL_CARD.md) · [Technical reference](docs/technical-reference.md) · [Scoring contract](docs/scoring-contract.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+
+Developed privately in September 2026 and published as a single commit; later changes are in the history.
 
 Python · pandas · scikit-learn · pytest · uv. The code is [MIT licensed](LICENSE).

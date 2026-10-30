@@ -1,30 +1,6 @@
-# Bank Churn Model
+# Technical reference
 
-Flags credit card customers likely to leave, sizes the outreach list to the retention team's capacity, and audits whether the model treats customer groups equitably. Ships as a small package with a training entrypoint, a saved model artifact, a prediction CLI with reason codes, a drift check, and tests that run in CI.
-
-[![CI](https://github.com/marinasofia/bank-churn-model/actions/workflows/ci.yml/badge.svg)](https://github.com/marinasofia/bank-churn-model/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](../pyproject.toml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](../LICENSE)
-
-## Quickstart
-
-Requires Python 3.12 or newer. Run from the checkout; the default artifact paths
-depend on it. The sample scores the committed dataset with the committed model.
-It demonstrates the CLI.
-
-```bash
-git clone https://github.com/marinasofia/bank-churn-model.git
-cd bank-churn-model
-python3 -m venv .venv
-.venv/bin/python -m pip install -e ".[dev]"
-mkdir -p outputs
-.venv/bin/python -m churn.predict bankchurners_clean.csv --capacity 900 --out outputs/outreach.csv
-.venv/bin/python -m pytest -q
-```
-
-Expect 900 selected rows plus a CSV header and per-feature drift statistics.
-Only load artifacts you trust: joblib model loading executes Python object
-deserialization. No API key or external service is required by this example.
+Detail that the [README](../README.md) leaves out: why the model is built the way it is, what can break and what catches it, where everything lives, and how to retrain. Results and the quickstart are in the README; per group numbers are in the [model card](../MODEL_CARD.md).
 
 ## Architecture
 
@@ -43,16 +19,7 @@ Notebooks retain the exploratory history; the package supplies reusable code.
 
 **Fairness is audited on the saved artifact, not on a rebuilt model.** Gender and income are not features. `audit/fairness_audit.py` loads `artifacts/model.joblib` and the saved test rows and measures recall, precision, and selection rate per group, because excluding an attribute does not stop behavioural features from acting as proxies for it.
 
-## Results
-
-Test set: 2,026 customers, 325 churners. The current training script reports feature ranking and cross-validated capacity curves from training rows.
-
-| | Logistic regression (shipped) | HistGradientBoosting | Rank by transaction count, no model |
-|---|---|---|---|
-| ROC-AUC on test | 0.871 (95% bootstrap CI 0.850 to 0.892) | 0.921 | 0.792 |
-| Recall at 900 flagged | 0.889 | 0.945 | 0.883 |
-| Recall at 600 flagged | 0.766 | 0.874 | 0.723 |
-| Recall at 300 flagged | 0.569 | 0.655 | 0.252 |
+## Cross validated capacity curve and coefficients
 
 Capacity curve for the shipped model, 5-fold cross-validated on the training set and stated per 2,026 customers scored (the test-set numbers at the same capacities are within two points of these):
 
@@ -117,45 +84,19 @@ ties. Outreach files are replaced only after a complete write. See the
 | `bankchurners_model.ipynb` | the original notebook walk-through of the split, scaling, and threshold sweep |
 | `tests/` | contract, leakage, reproducibility, evaluation, prediction, drift, fairness gate |
 
-## Run
+## Retrain
 
-After the quickstart, train into a separate directory to preserve the committed
-reference bundle:
+Train into a separate directory to keep the committed reference bundle intact, then score with it:
 
 ```bash
-.venv/bin/python -m churn.train --out outputs/retrained
-.venv/bin/python -m churn.predict bankchurners_clean.csv --artifacts outputs/retrained --capacity 900 --out outputs/retrained-outreach.csv
+uv run python -m churn.train --out outputs/retrained
+uv run python -m churn.predict bankchurners_clean.csv --artifacts outputs/retrained --capacity 900 --out outputs/retrained-outreach.csv
 ```
 
-For your own batch, supply a CSV with `CLIENTNUM` and the columns defined in
-[churn/features.py](../churn/features.py). Use unique, nonmissing IDs, finite
-numeric features, a positive integer capacity, or a threshold from 0 to 1.
-`--force` overrides
-the drift refusal, so use it only after investigating the distribution change.
+To replace the shipped model, train into `artifacts`, rerun `audit/fairness_audit.py`, run the tests, and update the model card with the new numbers. CI retrains into a scratch directory and fails if the committed fairness report no longer matches the artifact.
 
-`--artifacts`, `--capacity` or `--threshold`, and `--out` configure scoring.
-There is no environment-variable secret or service configuration. Dependencies
-are declared in `pyproject.toml`; `requirements.txt` provides a runtime install
-alternative, not a lockfile. See [CONTRIBUTING.md](../CONTRIBUTING.md) for checks.
+For your own batch, supply a CSV with `CLIENTNUM` and the columns defined in [churn/features.py](../churn/features.py). Use unique, nonmissing IDs, finite numeric features, a positive integer capacity, or a threshold from 0 to 1. `--force` overrides the drift refusal, so use it only after investigating the distribution change. Scoring needs no environment variables or external services.
 
 ## Data
 
 BankChurners, 10,127 credit card customers, from ["Credit Card customers" by Sakshi Goyal on Kaggle](https://www.kaggle.com/datasets/sakshigoyal7/credit-card-customers). See [data provenance](data-provenance.md). Cleaning is in `bankchurners_cleaning.ipynb`: two `Naive_Bayes_Classifier_*` columns dropped by prefix because they are predictions on this same target, "Unknown" recoded to NaN (Education 1,519; Income 1,112; Marital 749), `CLIENTNUM` as index so it can never enter the feature matrix, ordered categoricals for income and card tier. Target: 1,627 of 10,127 customers churned, 16.1%.
-
-## Scope
-
-The package supports offline training and scoring.
-
-## Development
-
-Tests run in CI. The September 4, 2026 baseline measured 86.1% line-plus-branch
-coverage on `churn/`.
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md), [maintainer guidance](maintenance.md),
-[SECURITY.md](../SECURITY.md), [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md), and
-[CHANGELOG.md](../CHANGELOG.md).
-
-## License
-
-Repository code is [MIT licensed](../LICENSE). Dataset terms are set by the
-upstream source described in the [provenance note](data-provenance.md).

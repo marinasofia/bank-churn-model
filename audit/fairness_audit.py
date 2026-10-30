@@ -38,8 +38,8 @@ from sklearn.metrics import precision_score, recall_score
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from churn.contract import feature_matrix, validate  # noqa: E402
-from churn.features import ID_COLUMN, INCOME_ORDER, PROTECTED_ATTRIBUTES, TARGET  # noqa: E402
+from churn.contract import feature_matrix, validate
+from churn.features import ID_COLUMN, INCOME_ORDER, PROTECTED_ATTRIBUTES, TARGET
 
 DATA_PATH = PROJECT_ROOT / "bankchurners_clean.csv"
 ARTIFACT_DIR = PROJECT_ROOT / "artifacts"
@@ -84,7 +84,7 @@ def group_prediction_metrics(test, group_col):
     for g, sub in test.groupby(group_col, observed=True):
         flagged = sub["y_flag"].sum()
         out[str(g)] = {
-            "n": int(len(sub)),
+            "n": len(sub),
             "n_churners": int(sub["y_true"].sum()),
             "recall": round(recall_score(sub["y_true"], sub["y_flag"]), 4),
             "precision": (
@@ -219,7 +219,7 @@ def main():
         "artifact": "artifacts/model.joblib",
         "trained_at": metrics["provenance"]["trained_at"],
         "threshold": THRESHOLD,
-        "test_set_size": int(len(test)),
+        "test_set_size": len(test),
         "overall": overall,
         "note": "Income_Category is missing for some customers; those rows "
                 "are excluded from income slices only. Groups with few actual "
