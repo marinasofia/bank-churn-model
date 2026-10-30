@@ -23,3 +23,5 @@ jobs:
       - name: Smoke-test retraining into a scratch directory
         run: uv run --frozen --no-sync python -m churn.train --out /tmp/artifacts
       - run: uv run --frozen --no-sync python audit/fairness_audit.py
+      - name: Fail if the committed fairness report is stale
+        run: git diff --exit-code audit/fairness_report.json
