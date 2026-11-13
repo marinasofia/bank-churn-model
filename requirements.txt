@@ -298,7 +298,7 @@ six==1.17.0
     # via
     #   python-dateutil
     #   rfc3339-validator
-soupsieve==2.9.2
+soupsieve==4.0
     # via beautifulsoup4
 stack-data==0.6.3
     # via ipython
