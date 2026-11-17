@@ -11,6 +11,15 @@ A credit card churn model that turns a month of customer data into a ranked outr
 
 A churn score on its own does not tell a retention team what to do on Monday. They can call a fixed number of customers, they need to know why each one is on the list, and they need to know the model treats customer groups evenly. So this project answers three questions: who to call first, why, and whether the list is fair. It reads a CSV, checks it against a strict contract, refuses to score data that has drifted away from what the model learned, and writes a ranked list with up to two reason codes per customer.
 
+## Key findings
+
+What the data says about who leaves, from the standardised coefficients in [artifacts/metrics.json](artifacts/metrics.json) (`coefficients_standardized`):
+
+* **Activity is the strongest signal.** Customers who make fewer transactions are by far the most likely to leave (coefficient -1.35, more than twice any other feature).
+* **A slowdown is a warning.** A drop in transactions from Q1 to Q4 (-0.58) and a low revolving balance (-0.63) both raise the risk, so disengagement shows up in the numbers before the account closes.
+* **Friction adds risk.** More months inactive (+0.50) and more contacts with the bank in the last year (+0.50) both push the probability up.
+* **The list size is the business lever.** Calling 300 customers catches 57% of churners, and calling 900 catches 89%, against a simple rule of ranking by fewest transactions that reaches ROC AUC 0.792.
+
 ## Quickstart
 
 Needs [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 automatically from `.python-version`.
